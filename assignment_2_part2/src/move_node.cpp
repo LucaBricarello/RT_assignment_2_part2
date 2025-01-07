@@ -1,71 +1,59 @@
-#include <iostream>
-#include <thread>
-#include <chrono>
 #include "rclcpp/rclcpp.hpp"
-#include <geometry_msgs/msg/twist.hpp>
+#include "nav_msgs/msg/odometry.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+
+rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher;
+
+using std::placeholders::_1;
+
+class RobotSubscriber : public rclcpp::Node
+{
+	public:
+  		RobotSubscriber() : Node("robot_subscriber")
+  		{
+    			subscription_ = this->create_subscription<nav_msgs::msg::Odometry>( "/odom", 10, std::bind(&RobotSubscriber::robot_callback, this, _1));
+  		}
+
+	private:
+  		void robot_callback(const nav_msgs::msg::Odometry::SharedPtr msg) const
+  		{
+    			geometry_msgs::msg::Twist my_vel;
+    			
+    			RCLCPP_INFO(this->get_logger(), "\nx: %f\ny: %f\n\n", msg->pose.pose.position.x, msg->pose.pose.position.y);
+	
+			if (msg->pose.pose.position.x < 9.0 && msg->pose.pose.position.x >= 2.0)
+			{
+				my_vel.linear.x = 1.0;
+			}
+			else
+			{
+				
+				if (msg->pose.pose.position.x >= 9.0)
+				{
+					my_vel.linear.x = 1.0;
+					my_vel.angular.z = 1.0;
+				}
+				else
+				{
+					my_vel.linear.x = 1.0;
+					my_vel.angular.z = -1.0;
+				}
+							
+			}
+	
+			publisher->publish(my_vel);
+  		}
+  		rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
+};
 
 int main(int argc, char * argv[])
 {
   	rclcpp::init(argc, argv);
-  	auto node = rclcpp::Node::make_shared("publisher");
-  	auto publisher = node->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+  	auto node = rclcpp::Node::make_shared("move_node");
   	
-  	geometry_msgs::msg::Twist my_vel;
+  	publisher = node->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
   	
-  	my_vel.linear.x = 11;
-	my_vel.angular.z = 11;
-
-  	while (rclcpp::ok()) 
-  	{
-  		while (my_vel.linear.x < -10 || my_vel.linear.x > 10)
-  		{
-			printf("Choose velocity on X axis, range -10 to 10 \n");
-			std::cin >> my_vel.linear.x;
-			// Check if the input failed
-			printf("\n");
-			if (my_vel.linear.x < -10 && my_vel.linear.x > 10)
-			{
-				std::cout << "Invalid input. Out of range.\n";
-			}
-			if (std::cin.fail()) 
-        		{
-            			std::cin.clear();
-            			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            			std::cout << "Invalid input. Enter a numeric value.\n";
-            			my_vel.linear.x = 11;
-        		}
-		}
-	
-		while (my_vel.angular.z < -10 || my_vel.angular.z > 10)
-  		{
-			printf("Choose angular velocity aroud Z axis, range -10 to 10 \n");
-			std::cin >> my_vel.angular.z;
-			printf("\n");
-			if (my_vel.angular.z < -10 && my_vel.angular.z > 10)
-			{
-				std::cout << "Invalid input. Out of range.\n";
-			}
-			if (std::cin.fail()) 
-        		{
-            			std::cin.clear();
-            			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            			std::cout << "Invalid input. Enter a numeric value.\n";
-				my_vel.angular.z = 11;
-        		}
-		}
-
-		publisher->publish(my_vel);
-
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-		
-		my_vel.linear.x = 0;
-		my_vel.angular.z = 0;
-
-		publisher->publish(my_vel);
-		
-		my_vel.linear.x = 11;
-		my_vel.angular.z = 11;
-  	}
+  	rclcpp::spin(std::make_shared<RobotSubscriber>());
   	
   	rclcpp::shutdown();
   	return 0;
