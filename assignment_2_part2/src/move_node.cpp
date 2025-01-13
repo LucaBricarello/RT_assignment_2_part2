@@ -1,17 +1,29 @@
+#include <cmath>
+#include <memory>
 #include "rclcpp/rclcpp.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/point.hpp"
+#include "interfaces/srv/lin_vel.hpp"
 
 rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher;
 
 using std::placeholders::_1;
 
-class RobotSubscriber : public rclcpp::Node
+class RobotNode : public rclcpp::Node
 {
 	public:
-  		RobotSubscriber() : Node("robot_subscriber")
+  		RobotNode() : Node("robot_node")
   		{
-    			subscription_ = this->create_subscription<nav_msgs::msg::Odometry>( "/odom", 10, std::bind(&RobotSubscriber::robot_callback, this, _1));
+    			subscription_ = this->create_subscription<nav_msgs::msg::Odometry>( "/odom", 10, std::bind(&RobotNode::robot_callback, this, _1));
+    			
+    			// Publishers
+        		publisher = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+        		pos_pub = this->create_publisher<geometry_msgs::msg::Point>("position_feet", 10);
+
+        		// Service
+        		lin_vel_service_ = this->create_service<interfaces::srv::LinVel>(
+            		 "set_lin_vel", std::bind(&RobotNode::lin_vel_service_callback, this, std::placeholders::_1, std::placeholders::_2));
   		}
 
 	private:
@@ -42,19 +54,47 @@ class RobotSubscriber : public rclcpp::Node
 			}
 	
 			publisher->publish(my_vel);
+			
+			geometry_msgs::msg::Point my_pos;
+			
+			my_pos.x = msg->pose.pose.position.x * 3.28;
+			my_pos.y = msg->pose.pose.position.y * 3.28;
+			
+			pos_pub->publish(my_pos);
   		}
-  		rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
+  		
+  		// Callback for the service
+    		void lin_vel_service_callback(const std::shared_ptr<interfaces::srv::LinVel::Request> request,
+        					std::shared_ptr<interfaces::srv::LinVel::Response> response)
+    		{
+    			if (request->lin_vel == 0)
+    			{
+        			lin_vel = 0;
+        			RCLCPP_INFO(this->get_logger(), "Linear velocity updated to: 0");
+        		}
+        		else
+        		{
+        			lin_vel = 1;
+        			RCLCPP_INFO(this->get_logger(), "Linear velocity updated to: 0");
+        		}
+    		}
+    		
+    		rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr subscription_;
+    		// Publishers
+    		rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher;
+    		rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr pos_pub;
+
+    		// Service
+    		rclcpp::Service<interfaces::srv::LinVel>::SharedPtr lin_vel_service_;
+
+    		// Internal variables
+    		float lin_vel;
 };
 
 int main(int argc, char * argv[])
 {
   	rclcpp::init(argc, argv);
-  	auto node = rclcpp::Node::make_shared("move_node");
-  	
-  	publisher = node->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
-  	
-  	rclcpp::spin(std::make_shared<RobotSubscriber>());
-  	
-  	rclcpp::shutdown();
-  	return 0;
+    	rclcpp::spin(std::make_shared<RobotNode>());
+    	rclcpp::shutdown();
+    	return 0;
 }
